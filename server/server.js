@@ -34,62 +34,60 @@ server.post('/api/user/by-name/ranked', async (req,res) => {
     });
 });
 
-server.post('/api/user/by-name/match-history', async (req,res) => {
+const delay = (amount = number) => {
+    return new Promise((resolve) => {
+      setTimeout(resolve, amount);
+    });
+}
 
+server.post('/api/user/by-name/match-history', async (req,res) => {
     axios.get(`https://na1.api.riotgames.com/lol/match/v4/matchlists/by-account/${req.body.accountId}?api_key=${process.env.RIOT_KEY}&endIndex=${req.body.endIndex}&beginIndex=${req.body.beginIndex}`)
     .then(async(response) => {
         let data = response.data.matches;
         let matches = await Promise.all(data.map(async(match) => {
+            const {champion, lane} = match;
+            await delay(1000);
             return await axios.get(`https://na1.api.riotgames.com/lol/match/v4/matches/${match.gameId}?api_key=${process.env.RIOT_KEY}`)
-            .then(res => {
+            .then(async(res) => {
                 let matchData = res.data;
                 let puId = 0;
                 for(let i = 0; i < matchData.participantIdentities.length; i++) {
                     if(matchData.participantIdentities[i].player.accountId === req.body.accountId) {
                         puId = matchData.participantIdentities[i].participantId;
+                        break;
                     }
                 }
-
-                return res.data.participants[puId].stats;
+                const {gameCreation, gameDuration, gameMode} = res.data;
+                const {kills, deaths, assists, champLevel, totalMinionsKilled, win, perk0, perk5} = res.data.participants[puId - 1].stats;
+                let finalData = {
+                    champion,
+                    lane,
+                    gameCreation,
+                    gameDuration,
+                    gameMode,
+                    kills,
+                    deaths,
+                    assists,
+                    champLevel,
+                    totalMinionsKilled,
+                    win,
+                    perk0,
+                    perk5
+                }
+                
+                return finalData;
             })
-            .catch(err => {
+            .catch(async(err) => {
                 return err
             });
+            
         }));
+
         res.status(res.statusCode).json(matches);
     })
     .catch(err => {
         res.status(400).json({error: 'message'});
     })
-    /*
-    await request(`https://na1.api.riotgames.com/lol/match/v4/matchlists/by-account/${req.body.accountId}?api_key=${process.env.RIOT_KEY}&endIndex=${req.body.endIndex}&beginIndex=${req.body.beginIndex}`, async function (error, response, body) {
-        if(error) {
-            res.status(500).json(error);
-        } else {
-            let newRes = await JSON.parse(body).matches;
-            let matches = [];
-            if(newRes) {
-                
-                matches = await newRes.map(async(match) => {
-                    let options = {
-                        method: 'GET',
-                        uri: `https://na1.api.riotgames.com/lol/match/v4/matches/${match.gameId}?api_key=${process.env.RIOT_KEY}`,
-                    }
-                    return await rp(options)
-                    .then(res => {
-                        return JSON.parse(res);
-                    })   
-                    .catch(err => {
-                        console.log(err);
-                        return null;
-                    });
-                })
-            }
-            console.log(matches)
-            res.status(response.statusCode).json(matches);
-        }
-    });
-    */
 });
 
 module.exports = server;
